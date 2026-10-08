@@ -56,9 +56,9 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "mkdir -p /opt/smai/observability/grafana/provisioning/dashboards/json"
+            "mkdir -p ~/smai/observability/grafana/provisioning/dashboards/json"
           scp -o StrictHostKeyChecking=no -r observability/* \
-            "$SSH_USER@$SSH_HOST:/opt/smai/observability/"
+            "$SSH_USER@$SSH_HOST:~/smai/observability/"
 
       - name: Render .env and alertmanager template
         env:
@@ -71,7 +71,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
             set -eu
-            cd /opt/smai/observability
+            cd ~/smai/observability
             cat > .env <<ENV
           GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
           DOMAIN_GRAFANA=${DOMAIN_GRAFANA}
@@ -88,7 +88,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
             set -eu
-            cd /opt/smai/observability/grafana/provisioning/dashboards/json
+            cd ~/smai/observability/grafana/provisioning/dashboards/json
             curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
             curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
             curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
@@ -100,7 +100,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "cd /opt/smai/observability && docker compose pull && docker compose up -d"
+            "cd ~/smai/observability && docker compose pull && docker compose up -d"
 
       - name: Smoke test
         env:
