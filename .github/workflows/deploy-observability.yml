@@ -103,9 +103,16 @@ jobs:
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
             set -eu
             cd ~/smai/observability/grafana/provisioning/dashboards/json
+
+            # скачиваем
             curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
             curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
             curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
+
+            # заменяем плейсхолдеры датасорсов на наши UID
+            sed -i 's/\${DS_PROMETHEUS}/prometheus/g' *.json
+            sed -i 's/\${DS_LOKI}/loki/g'             *.json
+            sed -i 's/\${DS_TEMPO}/tempo/g'           *.json
           EOF
 
       - name: Deploy stack
