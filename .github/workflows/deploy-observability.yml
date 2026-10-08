@@ -24,10 +24,31 @@ jobs:
         env:
           NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
           NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           sudo netbird up \
             --management-url "$NETBIRD_CLUSTER_URL" \
             --setup-key "$NETBIRD_SETUP_KEY"
+          
+          # ждём, пока маршруты NetBird реально поднимутся
+          for i in $(seq 1 30); do
+            if sudo netbird status -d 2>/dev/null | grep -q "Connected"; then
+              echo "NetBird reports Connected"
+              break
+            fi
+            echo "waiting for netbird status... ($i)"
+            sleep 2
+          done
+          
+          # ждём, пока раннер начнёт резолвить хост через NetBird DNS
+          for i in $(seq 1 30); do
+            if getent hosts "$SSH_HOST" >/dev/null 2>&1; then
+              echo "host $SSH_HOST resolved"
+              break
+            fi
+            echo "waiting for host resolution... ($i)"
+            sleep 2
+          done
 
       - name: Copy observability stack to VM
         env:
