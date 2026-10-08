@@ -68,16 +68,31 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
-            set -eu
-            cd ~/smai/observability
-            cat > .env <<ENV
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "GRAFANA_ADMIN_PASSWORD='$GRAFANA_ADMIN_PASSWORD' \
+             DOMAIN_GRAFANA='$DOMAIN_GRAFANA' \
+             TELEGRAM_BOT_TOKEN='$TELEGRAM_BOT_TOKEN' \
+             TELEGRAM_CHAT_ID='$TELEGRAM_CHAT_ID' \
+             bash -s" <<'EOF'
+          set -eu
+          cd ~/smai/observability
+
+          # пишем .env из переданных переменных
+          cat > .env <<ENV
           GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
           DOMAIN_GRAFANA=${DOMAIN_GRAFANA}
           TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
           TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
           ENV
-            envsubst < alertmanager/alertmanager.yml.tpl > alertmanager/alertmanager.yml
+
+          # экспортируем .env в окружение и рендерим шаблон
+          set -a
+          . ./.env
+          set +a
+
+          envsubst '${TELEGRAM_BOT_TOKEN} ${TELEGRAM_CHAT_ID}' \
+            < alertmanager/alertmanager.yml.tpl \
+            > alertmanager/alertmanager.yml
           EOF
 
       - name: Download Grafana dashboards

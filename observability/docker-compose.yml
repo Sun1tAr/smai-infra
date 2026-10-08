@@ -63,7 +63,7 @@ services:
     networks: [observability_net]
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.6.1
     container_name: smai-tempo
     restart: unless-stopped
     volumes:
