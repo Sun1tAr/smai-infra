@@ -1,0 +1,85 @@
+name: deploy-postgres
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        options: [stage, prod]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+
+          until getent hosts "$SSH_HOST" >/dev/null 2>&1; do
+            echo "waiting for $SSH_HOST..."
+            sleep 2
+          done
+
+      - name: Copy postgres stack
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            postgres/ "$SSH_USER@$SSH_HOST:~/smai/postgres/"
+
+      - name: Render .env
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGADMIN_EMAIL: ${{ secrets.PGADMIN_EMAIL }}
+          PGADMIN_PASSWORD: ${{ secrets.PGADMIN_PASSWORD }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
+            set -eu
+            cd ~/smai/postgres
+            cat > .env <<ENV
+          POSTGRES_DB=${POSTGRES_DB}
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          PGADMIN_EMAIL=${PGADMIN_EMAIL}
+          PGADMIN_PASSWORD=${PGADMIN_PASSWORD}
+          ENV
+          EOF
+
+      - name: Deploy
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "cd ~/smai/postgres && docker compose pull && docker compose up -d"
+
+      - name: Smoke test
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+            set -eu
+            docker exec smai-postgres pg_isready
+            echo "postgres stack OK"
+          EOF
