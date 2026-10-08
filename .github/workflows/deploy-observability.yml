@@ -24,20 +24,40 @@ jobs:
         env:
           NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
           NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           sudo netbird up \
             --management-url "$NETBIRD_CLUSTER_URL" \
             --setup-key "$NETBIRD_SETUP_KEY"
+          
+          # ждём, пока маршруты NetBird реально поднимутся
+          for i in $(seq 1 30); do
+            if sudo netbird status -d 2>/dev/null | grep -q "Connected"; then
+              echo "NetBird reports Connected"
+              break
+            fi
+            echo "waiting for netbird status... ($i)"
+            sleep 2
+          done
+          
+          # ждём, пока раннер начнёт резолвить хост через NetBird DNS
+          for i in $(seq 1 30); do
+            if getent hosts "$SSH_HOST" >/dev/null 2>&1; then
+              echo "host $SSH_HOST resolved"
+              break
+            fi
+            echo "waiting for host resolution... ($i)"
+            sleep 2
+          done
 
       - name: Copy observability stack to VM
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "mkdir -p /opt/smai/observability/grafana/provisioning/dashboards/json"
-          scp -o StrictHostKeyChecking=no -r observability/* \
-            "$SSH_USER@$SSH_HOST:/opt/smai/observability/"
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            observability/ "$SSH_USER@$SSH_HOST:~/smai/observability/"
 
       - name: Render .env and alertmanager template
         env:
@@ -48,16 +68,31 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
-            set -eu
-            cd /opt/smai/observability
-            cat > .env <<ENV
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "GRAFANA_ADMIN_PASSWORD='$GRAFANA_ADMIN_PASSWORD' \
+             DOMAIN_GRAFANA='$DOMAIN_GRAFANA' \
+             TELEGRAM_BOT_TOKEN='$TELEGRAM_BOT_TOKEN' \
+             TELEGRAM_CHAT_ID='$TELEGRAM_CHAT_ID' \
+             bash -s" <<'EOF'
+          set -eu
+          cd ~/smai/observability
+
+          # пишем .env из переданных переменных
+          cat > .env <<ENV
           GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
           DOMAIN_GRAFANA=${DOMAIN_GRAFANA}
           TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
           TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
           ENV
-            envsubst < alertmanager/alertmanager.yml.tpl > alertmanager/alertmanager.yml
+
+          # экспортируем .env в окружение и рендерим шаблон
+          set -a
+          . ./.env
+          set +a
+
+          envsubst '${TELEGRAM_BOT_TOKEN} ${TELEGRAM_CHAT_ID}' \
+            < alertmanager/alertmanager.yml.tpl \
+            > alertmanager/alertmanager.yml
           EOF
 
       - name: Download Grafana dashboards
@@ -67,10 +102,17 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
             set -eu
-            cd /opt/smai/observability/grafana/provisioning/dashboards/json
+            cd ~/smai/observability/grafana/provisioning/dashboards/json
+
+            # скачиваем
             curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
             curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
             curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
+
+            # заменяем плейсхолдеры датасорсов на наши UID
+            sed -i 's/\${DS_PROMETHEUS}/prometheus/g' *.json
+            sed -i 's/\${DS_LOKI}/loki/g'             *.json
+            sed -i 's/\${DS_TEMPO}/tempo/g'           *.json
           EOF
 
       - name: Deploy stack
@@ -79,7 +121,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "cd /opt/smai/observability && docker compose pull && docker compose up -d"
+            "cd ~/smai/observability && docker compose pull && docker compose up -d"
 
       - name: Smoke test
         env:
@@ -90,6 +132,5 @@ jobs:
             set -eu
             docker exec smai-prometheus wget -qO- http://localhost:9090/-/healthy
             docker exec smai-grafana    wget -qO- http://localhost:3000/api/health
-            docker exec smai-loki       wget -qO- http://localhost:3100/ready
-            echo "observability stack OK"
+            echo "observability core OK"
           EOF

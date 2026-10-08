@@ -3,6 +3,7 @@ name: smai-observability
 networks:
   observability_net:
     name: smai-observability-net
+    driver: bridge
 
 volumes:
   prometheus_data:
@@ -16,6 +17,8 @@ services:
     image: prom/prometheus:latest
     container_name: smai-prometheus
     restart: unless-stopped
+    ports:
+      - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -34,6 +37,9 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "https://${DOMAIN_GRAFANA}"
+      GF_SECURITY_CSRF_TRUSTED_ORIGINS: "${DOMAIN_GRAFANA}"
+    ports:
+      - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -63,7 +69,7 @@ services:
     networks: [observability_net]
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.6.1
     container_name: smai-tempo
     restart: unless-stopped
     volumes:
@@ -77,6 +83,9 @@ services:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: smai-otel-collector
     restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "4318:4318"
     volumes:
       - ./otel/otel-config.yml:/etc/otelcol-contrib/config.yml:ro
     command: ["--config=/etc/otelcol-contrib/config.yml"]
@@ -87,6 +96,8 @@ services:
     image: prom/alertmanager:latest
     container_name: smai-alertmanager
     restart: unless-stopped
+    ports:
+      - "9093:9093"
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
