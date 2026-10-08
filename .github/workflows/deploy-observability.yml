@@ -1,0 +1,95 @@
+name: deploy-observability
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        options: [stage, prod]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+
+      - name: Copy observability stack to VM
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "mkdir -p /opt/smai/observability/grafana/provisioning/dashboards/json"
+          scp -o StrictHostKeyChecking=no -r observability/* \
+            "$SSH_USER@$SSH_HOST:/opt/smai/observability/"
+
+      - name: Render .env and alertmanager template
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          DOMAIN_GRAFANA: ${{ secrets.DOMAIN_GRAFANA }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
+            set -eu
+            cd /opt/smai/observability
+            cat > .env <<ENV
+          GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+          DOMAIN_GRAFANA=${DOMAIN_GRAFANA}
+          TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+          TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+          ENV
+            envsubst < alertmanager/alertmanager.yml.tpl > alertmanager/alertmanager.yml
+          EOF
+
+      - name: Download Grafana dashboards
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+            set -eu
+            cd /opt/smai/observability/grafana/provisioning/dashboards/json
+            curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
+            curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
+            curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
+          EOF
+
+      - name: Deploy stack
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "cd /opt/smai/observability && docker compose pull && docker compose up -d"
+
+      - name: Smoke test
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+            set -eu
+            docker exec smai-prometheus wget -qO- http://localhost:9090/-/healthy
+            docker exec smai-grafana    wget -qO- http://localhost:3000/api/health
+            docker exec smai-loki       wget -qO- http://localhost:3100/ready
+            echo "observability stack OK"
+          EOF

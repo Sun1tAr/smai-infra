@@ -1,0 +1,117 @@
+name: smai-observability
+
+networks:
+  observability_net:
+    name: smai-observability-net
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
+  alertmanager_data:
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smai-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    networks: [observability_net]
+    expose: ["9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smai-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "https://${DOMAIN_GRAFANA}"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [observability_net]
+    expose: ["3000"]
+
+  loki:
+    image: grafana/loki:latest
+    container_name: smai-loki
+    restart: unless-stopped
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks: [observability_net]
+    expose: ["3100"]
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: smai-promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    networks: [observability_net]
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: smai-tempo
+    restart: unless-stopped
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/var/tempo
+    command: -config.file=/etc/tempo/tempo.yml
+    networks: [observability_net]
+    expose: ["3200"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: smai-otel-collector
+    restart: unless-stopped
+    volumes:
+      - ./otel/otel-config.yml:/etc/otelcol-contrib/config.yml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    networks: [observability_net]
+    expose: ["4317", "4318", "8889"]
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: smai-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    networks: [observability_net]
+    expose: ["9093"]
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: smai-node-exporter
+    restart: unless-stopped
+    pid: host
+    networks: [observability_net]
+    expose: ["9100"]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: smai-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [observability_net]
+    expose: ["8080"]
