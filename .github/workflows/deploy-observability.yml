@@ -57,8 +57,9 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
             "mkdir -p ~/smai/observability/grafana/provisioning/dashboards/json"
-          scp -o StrictHostKeyChecking=no -r observability/* \
-            "$SSH_USER@$SSH_HOST:~/smai/observability/"
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            observability/ "$SSH_USER@$SSH_HOST:~/smai/observability/"
 
       - name: Render .env and alertmanager template
         env:
