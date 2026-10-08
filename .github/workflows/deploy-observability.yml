@@ -55,8 +55,6 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "mkdir -p ~/smai/observability/grafana/provisioning/dashboards/json"
           rsync -avz --delete \
             -e "ssh -o StrictHostKeyChecking=no" \
             observability/ "$SSH_USER@$SSH_HOST:~/smai/observability/"
