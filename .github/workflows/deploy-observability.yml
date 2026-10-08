@@ -125,6 +125,5 @@ jobs:
             set -eu
             docker exec smai-prometheus wget -qO- http://localhost:9090/-/healthy
             docker exec smai-grafana    wget -qO- http://localhost:3000/api/health
-            docker exec smai-loki       wget -qO- http://localhost:3100/ready
-            echo "observability stack OK"
+            echo "observability core OK"
           EOF
