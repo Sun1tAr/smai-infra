@@ -5,13 +5,19 @@ networks:
     name: smai-observability-net
     external: true
 
+volumes:
+  kiosk_apk_data:
+    name: smai-kiosk-apk-data
+
 services:
   kiosk:
-    image: ${KIOSK_IMAGE:-ghcr.io/<owner>/smai-kiosk:latest}
+    image: ${KIOSK_IMAGE:-ghcr.io/sun1tar/smai-kiosk:latest}
     container_name: smai-kiosk
     restart: unless-stopped
     env_file: ./kiosk.env
     profiles: [kiosk]
     networks: [default]
     ports:
-      - "9090:9090"
+      - "9090:8000"
+    volumes:
+      - kiosk_apk_data:/kiosk
