@@ -36,22 +36,22 @@ jobs:
           IMAGE: ${{ github.event.client_payload.image }}
           ENV_JSON: ${{ toJson(github.event.client_payload.env) }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
-            set -eu
-            cd ~/smai/services
+          SERVICE_UPPER=$(echo "$SERVICE" | tr 'a-z' 'A-Z' | tr '-' '_')
 
-            # <service>.env — переменные контейнера
-            cat > ${SERVICE}.env <<'ENVEOF'
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "SERVICE='$SERVICE' SERVICE_UPPER='$SERVICE_UPPER' IMAGE='$IMAGE' bash -s" <<EOF
+          set -eu
+          cd ~/smai/services
+
+          cat > \$SERVICE.env <<'ENVEOF'
           $(echo "$ENV_JSON" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"')
           ENVEOF
 
-            # полный образ в .env (для docker compose)
-            SERVICE_UPPER=$(echo "${SERVICE}" | tr 'a-z' 'A-Z' | tr '-' '_')
-            if grep -q "^${SERVICE_UPPER}_IMAGE=" .env 2>/dev/null; then
-              sed -i "s|^${SERVICE_UPPER}_IMAGE=.*|${SERVICE_UPPER}_IMAGE=${IMAGE}|" .env
-            else
-              echo "${SERVICE_UPPER}_IMAGE=${IMAGE}" >> .env
-            fi
+          if grep -q "^\${SERVICE_UPPER}_IMAGE=" .env 2>/dev/null; then
+            sed -i "s|^\${SERVICE_UPPER}_IMAGE=.*|\${SERVICE_UPPER}_IMAGE=\${IMAGE}|" .env
+          else
+            echo "\${SERVICE_UPPER}_IMAGE=\${IMAGE}" >> .env
+          fi
 
-            echo "staged ${SERVICE} -> ${IMAGE}"
+          echo "staged \${SERVICE} -> \${IMAGE}"
           EOF
