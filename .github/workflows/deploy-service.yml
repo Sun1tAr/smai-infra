@@ -49,6 +49,16 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             services/ "$SSH_USER@$SSH_HOST:~/smai/services/"
 
+      - name: Login to ghcr on VM
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
       - name: Deploy
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
