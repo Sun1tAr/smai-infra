@@ -18,6 +18,6 @@ services:
     profiles: [kiosk]
     networks: [default]
     ports:
-      - "9090:8000"
+      - "8888:8000"
     volumes:
       - kiosk_apk_data:/kiosk
