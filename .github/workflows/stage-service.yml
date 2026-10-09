@@ -1,0 +1,57 @@
+name: stage-service
+
+on:
+  repository_dispatch:
+    types: [stage-service]
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.client_payload.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+          until getent hosts "$SSH_HOST" >/dev/null 2>&1; do
+            echo "waiting for $SSH_HOST..."
+            sleep 2
+          done
+
+      - name: Update env and image on VM
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SERVICE: ${{ github.event.client_payload.service }}
+          IMAGE: ${{ github.event.client_payload.image }}
+          ENV_JSON: ${{ toJson(github.event.client_payload.env) }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
+            set -eu
+            cd ~/smai/services
+
+            # <service>.env — переменные контейнера
+            cat > ${SERVICE}.env <<'ENVEOF'
+          $(echo "$ENV_JSON" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"')
+          ENVEOF
+
+            # полный образ в .env (для docker compose)
+            SERVICE_UPPER=$(echo "${SERVICE}" | tr 'a-z' 'A-Z' | tr '-' '_')
+            if grep -q "^${SERVICE_UPPER}_IMAGE=" .env 2>/dev/null; then
+              sed -i "s|^${SERVICE_UPPER}_IMAGE=.*|${SERVICE_UPPER}_IMAGE=${IMAGE}|" .env
+            else
+              echo "${SERVICE_UPPER}_IMAGE=${IMAGE}" >> .env
+            fi
+
+            echo "staged ${SERVICE} -> ${IMAGE}"
+          EOF
