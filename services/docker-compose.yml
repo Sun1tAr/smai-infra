@@ -1,0 +1,17 @@
+name: smai-services
+
+networks:
+  default:
+    name: smai-observability-net
+    external: true
+
+services:
+  kiosk:
+    image: ${KIOSK_IMAGE:-ghcr.io/<owner>/smai-kiosk:latest}
+    container_name: smai-kiosk
+    restart: unless-stopped
+    env_file: ./kiosk.env
+    profiles: [kiosk]
+    networks: [default]
+    ports:
+      - "9090:9090"

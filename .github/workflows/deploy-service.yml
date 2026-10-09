@@ -1,0 +1,46 @@
+name: deploy-service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        options: [stage, prod]
+      service:
+        description: "Service to deploy"
+        type: choice
+        required: true
+        options: [kiosk]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+          until getent hosts "$SSH_HOST" >/dev/null 2>&1; do
+            echo "waiting for $SSH_HOST..."
+            sleep 2
+          done
+
+      - name: Deploy
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "cd ~/smai/services && docker compose --profile ${SERVICE} pull && docker compose --profile ${SERVICE} up -d"
