@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install NetBird
         run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
 
@@ -35,6 +37,17 @@ jobs:
             echo "waiting for $SSH_HOST..."
             sleep 2
           done
+
+      - name: Copy services stack
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "mkdir -p ~/smai/services"
+          rsync -avz --exclude='*.env' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            services/ "$SSH_USER@$SSH_HOST:~/smai/services/"
 
       - name: Deploy
         env:
