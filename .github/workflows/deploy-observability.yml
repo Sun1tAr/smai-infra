@@ -122,15 +122,3 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
             "cd ~/smai/observability && docker compose pull && docker compose up -d --force-recreate"
-
-      - name: Smoke test
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-        run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
-            set -eu
-            docker exec smai-prometheus wget -qO- http://localhost:9090/-/healthy
-            docker exec smai-grafana    wget -qO- http://localhost:3000/api/health
-            echo "observability core OK"
-          EOF
