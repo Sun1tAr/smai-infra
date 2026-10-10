@@ -1,0 +1,65 @@
+name: deploy-ai
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        required: true
+        options: [ ai ]
+        description: "Deploy AI environment"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+          until getent hosts "$SSH_HOST" >/dev/null 2>&1; do
+            echo "waiting for $SSH_HOST..."
+            sleep 2
+          done
+
+      - name: Copy AI stack
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "mkdir -p ~/smai/ai"
+          rsync -avz --exclude='*.env' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ai/ "$SSH_USER@$SSH_HOST:~/smai/ai/"
+
+      - name: Deploy
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "cd ~/smai/ai && docker compose pull && docker compose up -d"
+
+      - name: Smoke test
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+            set -eu
+            curl -fsS http://127.0.0.1:11434/api/tags >/dev/null
+            curl -fsS http://127.0.0.1:8080/metrics | head -5
+            echo "ai stack OK"
+          EOF
