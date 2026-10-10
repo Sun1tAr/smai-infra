@@ -107,9 +107,7 @@ jobs:
             # скачиваем
             curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
             curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
-
-            # Ollama dashboard от NorskHelsenett (совпадает с нашим экспортёром)
-            curl -fsSL -o ollama.json       https://grafana.com/api/dashboards/24085/revisions/latest/download
+            curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
 
             # заменяем плейсхолдеры датасорсов на наши UID
             sed -i 's/\${DS_PROMETHEUS}/prometheus/g' *.json
@@ -123,7 +121,7 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "cd ~/smai/observability && docker compose pull && docker compose up -d"
+            "cd ~/smai/observability && docker compose pull && docker compose up -d --force-recreate"
 
       - name: Smoke test
         env:
