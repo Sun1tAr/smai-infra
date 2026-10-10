@@ -107,7 +107,9 @@ jobs:
             # скачиваем
             curl -fsSL -o node-exporter.json https://grafana.com/api/dashboards/1860/revisions/latest/download
             curl -fsSL -o cadvisor.json     https://grafana.com/api/dashboards/14282/revisions/latest/download
-            curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
+
+            # Ollama dashboard от NorskHelsenett (совпадает с нашим экспортёром)
+            curl -fsSL -o ollama.json       https://raw.githubusercontent.com/NorskHelsenett/ollama-metrics/main/prometheus/grafana/dashboards/ollama.json
 
             # заменяем плейсхолдеры датасорсов на наши UID
             sed -i 's/\${DS_PROMETHEUS}/prometheus/g' *.json
