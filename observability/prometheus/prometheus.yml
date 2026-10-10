@@ -26,3 +26,9 @@ scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: ["smai-otel-collector:8889"]
+
+  - job_name: ollama
+    static_configs:
+      - targets: [ "sm-ai.netbird.selfhosted:8080" ]
+        labels:
+          instance: "ollama-ai"
