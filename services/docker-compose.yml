@@ -21,3 +21,23 @@ services:
       - "8888:8000"
     volumes:
       - kiosk_apk_data:/kiosk
+
+
+  gateway:
+    image: ${GATEWAY_IMAGE:-ghcr.io/sun1tar/smai-gateway:latest}
+    container_name: smai-gateway
+    restart: unless-stopped
+    env_file: ./gateway.env
+    profiles: [gateway]
+    networks: [default]
+    ports:
+      - "8000:8000"
+
+
+  recipes:
+    image: ${RECIPES_IMAGE:-ghcr.io/sun1tar/smai-recipes:latest}
+    container_name: smai-recipes
+    restart: unless-stopped
+    env_file: ./recipes.env
+    profiles: [recipes]
+    networks: [default]
