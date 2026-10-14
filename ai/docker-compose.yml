@@ -11,12 +11,13 @@ volumes:
 
 services:
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.6.2
     container_name: smai-ollama
     restart: unless-stopped
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_LLM_LIBRARY=cuda_v12
     volumes:
       - ollama_models:/root/.ollama
     networks: [default]
