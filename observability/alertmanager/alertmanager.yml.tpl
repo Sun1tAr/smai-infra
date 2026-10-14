@@ -7,6 +7,17 @@ route:
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 3h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: telegram
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers:
+        - severity = "warning"
+      receiver: telegram
+      group_wait: 1m
+      repeat_interval: 6h
 
 receivers:
   - name: telegram

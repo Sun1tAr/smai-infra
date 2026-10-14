@@ -1,0 +1,77 @@
+groups:
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.job }} ({{ $labels.instance }}) недоступен"
+          description: "Prometheus не может скрейпить target более 2 минут."
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Мало места на {{ $labels.mountpoint }}"
+          description: "Свободно {{ $value | humanizePercentage }} на {{ $labels.mountpoint }}."
+
+      - alert: MemoryHigh
+        expr: |
+          (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAM загружена > 90%"
+          description: "Использование памяти {{ $value | humanizePercentage }}."
+
+      - alert: CpuHigh
+        expr: |
+          (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU загружен > 90%"
+          description: "CPU {{ $value | humanizePercentage }} на {{ $labels.instance }}."
+
+  - name: containers
+    interval: 30s
+    rules:
+      - alert: ContainerDown
+        expr: |
+          (time() - container_last_seen{name=~"smai-.+"}) > 120
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Контейнер {{ $labels.name }} не работает"
+          description: "Контейнер не обновлялся более 2 минут."
+
+  - name: ollama
+    interval: 30s
+    rules:
+      - alert: OllamaModelNotLoaded
+        expr: ollama_loaded_models == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ollama: модель не загружена в память"
+          description: "Ни одна модель не загружена — генерация пойдёт на CPU или упадёт."
+
+      - alert: OllamaModelRamHigh
+        expr: ollama_model_ram_mb > 7000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ollama: RAM модели {{ $labels.model }} > 7 ГБ"
+          description: "Память модели приближается к лимиту VRAM."
