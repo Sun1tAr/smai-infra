@@ -32,3 +32,15 @@ scrape_configs:
       - targets: [ "sm-ai.netbird.selfhosted:8080" ]
         labels:
           instance: "ollama-ai"
+
+  - job_name: ai-node-exporter
+    static_configs:
+      - targets: [ "sm-ai.netbird.selfhosted:9100" ]
+        labels:
+          instance: "ai-core"
+
+  - job_name: ai-cadvisor
+    static_configs:
+      - targets: [ "sm-ai.netbird.selfhosted:8081" ]
+        labels:
+          instance: "ai-core"
