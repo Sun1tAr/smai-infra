@@ -44,3 +44,15 @@ scrape_configs:
       - targets: [ "sm-ai.netbird.selfhosted:8081" ]
         labels:
           instance: "ai-core"
+
+  - job_name: gateway
+    static_configs:
+      - targets: ["smai-gateway:8000"]
+
+  - job_name: recipes
+    static_configs:
+      - targets: ["smai-recipes:8000"]
+
+  - job_name: dictionary
+    static_configs:
+      - targets: ["smai-dictionary:8000"]
