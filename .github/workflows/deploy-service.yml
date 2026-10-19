@@ -12,7 +12,7 @@ on:
         description: "Service to deploy"
         type: choice
         required: true
-        options: [kiosk, recipes, gateway]
+        options: [kiosk, recipes, gateway, dictionary]
 
 jobs:
   deploy:

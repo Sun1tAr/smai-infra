@@ -41,3 +41,11 @@ services:
     env_file: ./recipes.env
     profiles: [recipes]
     networks: [default]
+
+  dictionary:
+    image: ${DICTIONARY_IMAGE:-ghcr.io/sun1tar/smai-dictionary:latest}
+    container_name: smai-dictionary
+    restart: unless-stopped
+    env_file: ./dictionary.env
+    profiles: [dictionary]
+    networks: [default]
