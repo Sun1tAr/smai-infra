@@ -51,7 +51,7 @@ jobs:
           done
 
       # Ключ пишется через контейнер: владелец UID 10001 (пользователь gateway), права 0400.
-      # Файл подменяется атомарно, gateway монтирует его как secret только на чтение.
+      # Файл подменяется атомарно; в сервис его монтирует deploy-service (secret jwt_private_key).
       - name: Install JWT key
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -67,23 +67,6 @@ jobs:
                mv -f /security/.jwt-private.pem.tmp /security/jwt-private.pem'" \
             < "$RUNNER_TEMP/jwt-private.pem"
 
-      # Секрет смонтирован bind mount'ом: после подмены файла gateway нужно пересоздать.
-      # Смена ключа инвалидирует все выданные токены.
-      - name: Restart gateway
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-        run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
-            set -eu
-            if docker ps -a --format '{{.Names}}' | grep -qx smai-gateway; then
-              cd ~/smai/services
-              docker compose --profile gateway up -d --force-recreate --no-deps gateway
-            else
-              echo "smai-gateway is not deployed yet, skip restart"
-            fi
-          EOF
-
       - name: Smoke test
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
@@ -94,16 +77,6 @@ jobs:
             perms=$(docker run --rm --network none -v ~/smai/security:/security:ro alpine:3.20 \
               stat -c '%u:%g %a' /security/jwt-private.pem)
             [ "$perms" = "10001:10001 400" ] || { echo "unexpected key perms: $perms" >&2; exit 1; }
-
-            if docker ps -a --format '{{.Names}}' | grep -qx smai-gateway; then
-              for i in $(seq 1 30); do
-                status=$(docker inspect -f '{{.State.Health.Status}}' smai-gateway)
-                [ "$status" = "healthy" ] && break
-                echo "waiting for smai-gateway... ($status)"
-                sleep 2
-              done
-              [ "$status" = "healthy" ] || { docker logs --tail 50 smai-gateway >&2; exit 1; }
-            fi
             echo "security stack OK"
           EOF
 

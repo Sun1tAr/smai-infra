@@ -66,4 +66,4 @@ jobs:
           SERVICE: ${{ inputs.service }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-            "cd ~/smai/services && docker compose --profile ${SERVICE} pull && docker compose --profile ${SERVICE} up -d"
+            "cd ~/smai/services && docker compose --profile ${SERVICE} pull && docker compose --profile ${SERVICE} up -d --force-recreate"
