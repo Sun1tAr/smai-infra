@@ -110,10 +110,12 @@ jobs:
             curl -fsSL -o loki.json         https://grafana.com/api/dashboards/13639/revisions/latest/download
             curl -fsSL -o alerts.json       https://grafana.com/api/dashboards/25796/revisions/latest/download
             curl -fsSL -o ollama.json       https://raw.githubusercontent.com/NorskHelsenett/ollama-metrics/refs/heads/main/prometheus/dashboard.json
+            curl -fsSL -o redis.json        https://grafana.com/api/dashboards/763/revisions/latest/download
 
             # заменяем плейсхолдеры датасорсов на наши UID
             sed -i 's/=\~"\."\*"/=~".+"/g' *.json
             sed -i 's/\${DS_PROMETHEUS}/prometheus/g' *.json
+            sed -i 's/\${DS_PROM}/prometheus/g'       *.json
             sed -i 's/\${DS_LOKI}/loki/g'             *.json
             sed -i 's/\${DS_TEMPO}/tempo/g'           *.json
           EOF

@@ -75,3 +75,42 @@ groups:
         annotations:
           summary: "Ollama: RAM модели {{ $labels.model }} > 7 ГБ"
           description: "Память модели приближается к лимиту VRAM."
+
+  - name: redis
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis недоступен"
+          description: "Экспортер не может подключиться к Redis."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9 and redis_memory_max_bytes > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis: память > 90% от maxmemory"
+          description: "Занято {{ $value | humanizePercentage }}. При noeviction запись новых ключей начнёт падать."
+
+      - alert: RedisRejectedConnections
+        expr: increase(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis отклоняет подключения"
+          description: "За 5 минут отклонено {{ $value }} подключений (лимит maxclients)."
+
+      - alert: RedisAofWriteFailed
+        expr: redis_aof_last_write_status == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis: ошибка записи AOF"
+          description: "Последняя запись AOF завершилась ошибкой — blacklist может не пережить рестарт."

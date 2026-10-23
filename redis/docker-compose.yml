@@ -1,0 +1,53 @@
+name: smai-redis
+
+networks:
+  default:
+    name: smai-observability-net
+    external: true
+  redis_net:
+    name: smai-redis-net
+    driver: bridge
+    internal: true
+
+volumes:
+  redis_data:
+    name: smai-redis-data
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: smai-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - >
+        exec redis-server
+        --requirepass "$$REDIS_PASSWORD"
+        --appendonly yes
+        --maxmemory 256mb
+        --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    networks: [redis_net]
+    expose: ["6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: smai-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://smai-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [default, redis_net]
+    expose: ["9121"]
+    depends_on:
+      redis:
+        condition: service_healthy

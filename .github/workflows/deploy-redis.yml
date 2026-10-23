@@ -1,0 +1,93 @@
+name: deploy-redis
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        required: true
+        options: [stage, prod]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NetBird
+        run: curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to NetBird
+        env:
+          NETBIRD_CLUSTER_URL: ${{ secrets.NETBIRD_CLUSTER_URL }}
+          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          sudo netbird up \
+            --management-url "$NETBIRD_CLUSTER_URL" \
+            --setup-key "$NETBIRD_SETUP_KEY"
+
+          until getent hosts "$SSH_HOST" >/dev/null 2>&1; do
+            echo "waiting for $SSH_HOST..."
+            sleep 2
+          done
+
+      - name: Copy redis stack
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            redis/ "$SSH_USER@$SSH_HOST:~/smai/redis/"
+
+      - name: Render .env
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<EOF
+            set -eu
+            cd ~/smai/redis
+            cat > .env <<ENV
+          REDIS_PASSWORD=${REDIS_PASSWORD}
+          ENV
+            chmod 600 .env
+          EOF
+
+      - name: Deploy
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+            "cd ~/smai/redis && docker compose pull && docker compose up -d --wait"
+
+      - name: Smoke test
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+            set -eu
+            cli() { docker exec smai-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning "$@"' _ "$@"; }
+
+            # порт наружу не опубликован
+            if [ -n "$(docker port smai-redis)" ]; then
+              echo "smai-redis publishes ports" >&2
+              exit 1
+            fi
+
+            # запись с TTL истекает в заданное время
+            cli SET smoke:ttl 1 EX 2 >/dev/null
+            [ "$(cli EXISTS smoke:ttl)" = "1" ]
+            sleep 3
+            [ "$(cli EXISTS smoke:ttl)" = "0" ]
+
+            # экспортер видит redis
+            docker run --rm --network smai-observability-net curlimages/curl:8.10.1 \n              -fsS http://smai-redis-exporter:9121/metrics | grep -q '^redis_up 1'
+            echo "redis stack OK"
+          EOF
