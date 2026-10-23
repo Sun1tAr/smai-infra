@@ -45,6 +45,12 @@ scrape_configs:
         labels:
           instance: "ai-core"
 
+  - job_name: redis
+    static_configs:
+      - targets: ["smai-redis-exporter:9121"]
+        labels:
+          instance: "redis"
+
   - job_name: gateway
     static_configs:
       - targets: ["smai-gateway:8000"]

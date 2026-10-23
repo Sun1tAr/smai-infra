@@ -4,6 +4,9 @@ networks:
   default:
     name: smai-observability-net
     external: true
+  redis_net:
+    name: smai-redis-net
+    external: true
 
 volumes:
   kiosk_apk_data:
@@ -29,7 +32,7 @@ services:
     restart: unless-stopped
     env_file: ./gateway.env
     profiles: [gateway]
-    networks: [default]
+    networks: [default, redis_net]
     ports:
       - "8000:8000"
 
