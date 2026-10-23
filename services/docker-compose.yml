@@ -12,6 +12,12 @@ volumes:
   kiosk_apk_data:
     name: smai-kiosk-apk-data
 
+# Ключ подписи JWT раскладывает deploy-security (секрет JWT_PRIVATE_KEY): UID 10001, 0400.
+# В контейнере доступен только на чтение по пути /run/secrets/jwt_private_key.
+secrets:
+  jwt_private_key:
+    file: ../security/jwt-private.pem
+
 services:
   kiosk:
     image: ${KIOSK_IMAGE:-ghcr.io/sun1tar/smai-kiosk:latest}
@@ -33,6 +39,8 @@ services:
     env_file: ./gateway.env
     profiles: [gateway]
     networks: [default, redis_net]
+    secrets:
+      - jwt_private_key
     ports:
       - "8000:8000"
 
@@ -51,4 +59,12 @@ services:
     restart: unless-stopped
     env_file: ./dictionary.env
     profiles: [dictionary]
+    networks: [default]
+
+  user:
+    image: ${USER_IMAGE:-ghcr.io/sun1tar/smai-user:latest}
+    container_name: smai-user
+    restart: unless-stopped
+    env_file: ./user.env
+    profiles: [user]
     networks: [default]
